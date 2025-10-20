@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, Moon, Sun, BookOpen, Code2, Database, Package, Link2, Shield } from "lucide-react";
+import { Search, Download, Moon, Sun, BookOpen, Code2, Database, Package, Link2, Shield, Terminal } from "lucide-react";
+import { Link } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -148,6 +149,12 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button variant="default" size="sm" asChild>
+                <Link href="/commands">
+                  <Terminal className="w-4 h-4 mr-2" />
+                  Commands Reference
+                </Link>
+              </Button>
               <Button variant="outline" size="sm" onClick={downloadMarkdown}>
                 <Download className="w-4 h-4 mr-2" />
                 Markdown

@@ -2610,3 +2610,562 @@ resources:
 
 This document represents a complete synthesis of official Databricks documentation, community resources, and open-source examples to provide actionable guidance for implementing Databricks Apps, Lakehouse architecture, and Asset Bundles in production environments.
 
+## Databricks Unity Catalog
+
+### Overview and Architecture
+
+**Databricks Unity Catalog** is a unified governance solution for data and AI assets on the Databricks platform. It provides centralized access control, auditing, lineage tracking, quality monitoring, and data discovery capabilities across all Databricks workspaces in an organization.
+
+Unity Catalog represents a paradigm shift in data governance by offering a single, consistent governance layer that spans across clouds, regions, and workspaces. It eliminates the complexity of managing multiple governance systems and provides a standards-compliant security model based on ANSI SQL.
+
+**Core Value Proposition:**
+
+Unity Catalog addresses the fundamental challenge of modern data governance: how to maintain security, compliance, and discoverability while enabling data democratization at scale. It provides enterprise-grade governance without sacrificing agility or developer productivity.
+
+### Key Features
+
+**1. Define Once, Secure Everywhere**
+
+Unity Catalog offers a single place to administer data access policies that apply across all workspaces in a region. This eliminates the need to replicate permissions across multiple systems and ensures consistent security posture.
+
+**2. Standards-Compliant Security Model**
+
+The security model is based on standard ANSI SQL, allowing administrators to grant permissions using familiar syntax. This reduces the learning curve and enables integration with existing governance frameworks.
+
+**3. Built-in Auditing and Lineage**
+
+Unity Catalog automatically captures user-level audit logs that record all access to data assets. It also captures comprehensive lineage data that tracks how data assets are created, transformed, and used across all languages (SQL, Python, R, Scala).
+
+**4. Data Discovery**
+
+Unity Catalog provides tagging, documentation, and search capabilities to help data consumers find the data they need. This includes support for business glossaries, data quality metrics, and usage statistics.
+
+**5. System Tables**
+
+Unity Catalog provides access to operational data through system tables, including audit logs, billable usage, and lineage information. This enables organizations to build custom monitoring and governance solutions.
+
+### Architecture Components
+
+#### The Three-Level Namespace
+
+Unity Catalog uses a three-level hierarchy for organizing data and AI assets:
+
+**Level 1: Metastore**
+- Top-level container for metadata
+- One metastore per region recommended
+- Multi-tenant service boundary
+- Registers metadata about data and AI assets
+
+**Level 2: Catalogs**
+- Organize data assets by business domain or lifecycle
+- Typically mirror organizational units (e.g., `marketing`, `finance`, `engineering`)
+- Can represent environments (e.g., `dev`, `staging`, `production`)
+
+**Level 3: Schemas (Databases)**
+- Contain tables, views, volumes, models, and functions
+- Organize assets into logical categories
+- Typically represent projects, use cases, or team sandboxes
+
+**Level 4: Data and AI Objects**
+- **Tables**: Managed or external collections of structured data
+- **Views**: Saved queries against tables
+- **Volumes**: Storage for unstructured data (files, images, documents)
+- **Functions**: User-defined functions (UDFs)
+- **Models**: ML models registered with MLflow
+
+#### Securable Objects
+
+Unity Catalog manages access through several types of securable objects:
+
+**Data Access Objects:**
+- **Storage Credentials**: Encapsulate cloud credentials for accessing storage
+- **External Locations**: Reference cloud storage paths with associated credentials
+- **Connections**: Provide access to external databases via Lakehouse Federation
+- **Service Credentials**: Access external services
+
+**Sharing Objects:**
+- **Shares**: Collections of data shared via Delta Sharing
+- **Recipients**: Entities that receive shared data
+- **Providers**: Entities that share data
+- **Clean Rooms**: Secure collaboration environments
+
+### Access Control Model
+
+#### Admin Roles
+
+Unity Catalog defines three primary admin roles:
+
+| Role | Scope | Key Privileges |
+|------|-------|----------------|
+| **Account Admin** | Account-wide | Create metastores, link workspaces, manage users |
+| **Metastore Admin** | Metastore | Manage storage, create catalogs, grant privileges |
+| **Workspace Admin** | Workspace | Manage workspace objects, add users, configure compute |
+
+#### Privilege Hierarchy
+
+Privileges in Unity Catalog follow an inheritance model:
+
+```
+Metastore
+  └─ Catalog (USAGE, CREATE SCHEMA, MANAGE)
+      └─ Schema (USAGE, CREATE TABLE, CREATE FUNCTION)
+          └─ Table/View (SELECT, MODIFY, READ_METADATA)
+```
+
+Access to a parent object implicitly grants the same access to all children unless explicitly revoked.
+
+#### Grant Syntax
+
+Unity Catalog uses standard SQL GRANT and REVOKE statements:
+
+```sql
+-- Grant table access to a group
+GRANT SELECT ON TABLE catalog.schema.table TO `data-analysts`;
+
+-- Grant schema creation privileges
+GRANT CREATE SCHEMA ON CATALOG production TO `data-engineers`;
+
+-- Grant catalog usage to all users
+GRANT USAGE ON CATALOG shared_data TO `account users`;
+
+-- Revoke privileges
+REVOKE SELECT ON TABLE catalog.schema.sensitive_data FROM `contractors`;
+```
+
+### Implementation Guide
+
+#### Step 1: Metastore Setup
+
+```sql
+-- Create a metastore (Account Admin only)
+-- This is typically done through the Databricks UI or Terraform
+
+-- Verify metastore attachment
+SELECT CURRENT_METASTORE();
+
+-- Check metastore details
+DESCRIBE METASTORE;
+```
+
+#### Step 2: Create Catalog Structure
+
+```sql
+-- Create catalogs for different environments
+CREATE CATALOG IF NOT EXISTS development
+  COMMENT 'Development environment catalog';
+
+CREATE CATALOG IF NOT EXISTS production
+  COMMENT 'Production environment catalog';
+
+-- Create schemas within catalogs
+CREATE SCHEMA IF NOT EXISTS production.customer_data
+  COMMENT 'Customer data and analytics';
+
+CREATE SCHEMA IF NOT EXISTS production.ml_models
+  COMMENT 'Production ML models';
+```
+
+#### Step 3: Configure Storage
+
+```sql
+-- Create storage credential
+CREATE STORAGE CREDENTIAL aws_s3_credential
+  WITH (
+    AWS_IAM_ROLE = 'arn:aws:iam::123456789012:role/databricks-s3-access'
+  )
+  COMMENT 'S3 access for production data';
+
+-- Create external location
+CREATE EXTERNAL LOCATION production_data
+  URL 's3://my-company-data/production/'
+  WITH (STORAGE CREDENTIAL aws_s3_credential)
+  COMMENT 'Production data storage location';
+
+-- Set managed storage location for catalog
+ALTER CATALOG production
+  SET MANAGED LOCATION 's3://my-company-data/managed/production/';
+```
+
+#### Step 4: Create and Manage Tables
+
+```sql
+-- Create managed table (Unity Catalog manages lifecycle)
+CREATE TABLE production.customer_data.customers (
+  customer_id BIGINT,
+  name STRING,
+  email STRING,
+  created_at TIMESTAMP
+)
+USING DELTA
+COMMENT 'Customer master data';
+
+-- Create external table (data managed externally)
+CREATE EXTERNAL TABLE production.customer_data.transactions
+LOCATION 's3://my-company-data/transactions/'
+COMMENT 'Customer transaction history';
+
+-- Create view with row-level security
+CREATE VIEW production.customer_data.customers_masked AS
+SELECT 
+  customer_id,
+  name,
+  CASE 
+    WHEN IS_MEMBER('pii-access') THEN email
+    ELSE 'REDACTED'
+  END AS email,
+  created_at
+FROM production.customer_data.customers;
+```
+
+#### Step 5: Grant Permissions
+
+```sql
+-- Grant catalog access to data analysts
+GRANT USAGE ON CATALOG production TO `data-analysts`;
+GRANT USAGE ON SCHEMA production.customer_data TO `data-analysts`;
+GRANT SELECT ON TABLE production.customer_data.customers_masked TO `data-analysts`;
+
+-- Grant full access to data engineers
+GRANT ALL PRIVILEGES ON CATALOG production TO `data-engineers`;
+
+-- Grant model serving access to applications
+GRANT EXECUTE ON FUNCTION production.ml_models.predict_churn TO `app-service-principal`;
+```
+
+### Advanced Features
+
+#### Row-Level and Column-Level Security
+
+```sql
+-- Row-level security using IS_MEMBER function
+CREATE VIEW sales.regional_data AS
+SELECT *
+FROM sales.all_sales
+WHERE 
+  region = CURRENT_USER() 
+  OR IS_MEMBER('sales-managers');
+
+-- Column-level security with dynamic masking
+CREATE VIEW customers.protected_view AS
+SELECT
+  customer_id,
+  name,
+  CASE 
+    WHEN IS_MEMBER('pii-viewers') THEN ssn
+    ELSE 'XXX-XX-XXXX'
+  END AS ssn,
+  CASE
+    WHEN IS_MEMBER('pii-viewers') THEN email
+    ELSE REGEXP_REPLACE(email, '^(.{2}).*(@.*)$', '$1***$2')
+  END AS email
+FROM customers.raw_data;
+```
+
+#### Data Lineage
+
+Unity Catalog automatically tracks lineage for:
+- Table-to-table transformations
+- Notebook and job executions
+- ML model training and serving
+- Cross-workspace data flows
+
+```sql
+-- Query lineage information
+SELECT * FROM system.access.table_lineage
+WHERE target_table_full_name = 'production.gold.customer_360'
+ORDER BY event_time DESC;
+```
+
+#### Audit Logging
+
+```sql
+-- Query audit logs for data access
+SELECT 
+  event_time,
+  user_identity.email,
+  request_params.full_name_arg AS table_accessed,
+  request_params.command_text AS query_text
+FROM system.access.audit
+WHERE action_name = 'getTable'
+  AND event_date >= CURRENT_DATE() - INTERVAL 7 DAYS
+ORDER BY event_time DESC;
+
+-- Monitor privilege grants
+SELECT 
+  event_time,
+  user_identity.email AS granted_by,
+  request_params.securable_full_name,
+  request_params.principal,
+  request_params.privileges
+FROM system.access.audit
+WHERE action_name = 'grant'
+ORDER BY event_time DESC;
+```
+
+#### Delta Sharing
+
+```sql
+-- Create a share for external data sharing
+CREATE SHARE customer_analytics_share
+COMMENT 'Shared customer analytics for partners';
+
+-- Add tables to the share
+ALTER SHARE customer_analytics_share
+ADD TABLE production.analytics.customer_metrics;
+
+-- Create recipient
+CREATE RECIPIENT partner_company
+USING ID 'partner-databricks-account-id'
+COMMENT 'Partner organization recipient';
+
+-- Grant access to share
+GRANT SELECT ON SHARE customer_analytics_share TO RECIPIENT partner_company;
+```
+
+### Integration with Databricks Services
+
+#### Unity Catalog + Databricks Apps
+
+```python
+# Access Unity Catalog tables from Databricks App
+import streamlit as st
+from databricks import sql
+import os
+
+# Connect using app identity
+connection = sql.connect(
+    server_hostname=os.getenv("DATABRICKS_HOST"),
+    http_path=f"/sql/1.0/warehouses/{os.getenv('WAREHOUSE_ID')}"
+)
+
+@st.cache_data
+def load_data(catalog, schema, table):
+    cursor = connection.cursor()
+    cursor.execute(f"SELECT * FROM {catalog}.{schema}.{table}")
+    return cursor.fetchall_arrow().to_pandas()
+
+# Load data with Unity Catalog governance
+df = load_data("production", "customer_data", "customers_masked")
+st.dataframe(df)
+```
+
+#### Unity Catalog + Asset Bundles
+
+```yaml
+# databricks.yml - Define Unity Catalog resources in bundles
+resources:
+  schemas:
+    customer_schema:
+      catalog_name: ${var.catalog}
+      name: customer_data
+      comment: "Customer data schema"
+      
+  grants:
+    analyst_access:
+      securable_type: "SCHEMA"
+      securable_name: "${var.catalog}.customer_data"
+      principal: "data-analysts"
+      privileges: ["USAGE", "SELECT"]
+```
+
+#### Unity Catalog + ML Models
+
+```python
+import mlflow
+from mlflow import MlflowClient
+
+# Set Unity Catalog as registry
+mlflow.set_registry_uri("databricks-uc")
+
+# Register model in Unity Catalog
+model_name = "production.ml_models.churn_prediction"
+mlflow.register_model(
+    model_uri=f"runs:/{run_id}/model",
+    name=model_name
+)
+
+# Set model alias
+client = MlflowClient()
+client.set_registered_model_alias(
+    name=model_name,
+    alias="champion",
+    version=3
+)
+
+# Grant model access
+spark.sql(f"""
+    GRANT EXECUTE ON FUNCTION {model_name}
+    TO `ml-serving-principal`
+""")
+```
+
+### Best Practices
+
+#### 1. Catalog Organization
+
+**Environment-Based:**
+```
+dev_catalog
+  └─ schema_a
+  └─ schema_b
+
+staging_catalog
+  └─ schema_a
+  └─ schema_b
+
+production_catalog
+  └─ schema_a
+  └─ schema_b
+```
+
+**Domain-Based:**
+```
+marketing_catalog
+  └─ campaigns
+  └─ analytics
+
+finance_catalog
+  └─ transactions
+  └─ reporting
+
+engineering_catalog
+  └─ telemetry
+  └─ logs
+```
+
+#### 2. Naming Conventions
+
+- Use lowercase with underscores: `customer_data`, `ml_models`
+- Include environment prefix when needed: `prod_customer_data`
+- Use descriptive schema names: `customer_analytics` not `schema1`
+- Document all objects with meaningful comments
+
+#### 3. Security Principles
+
+- **Principle of Least Privilege**: Grant minimum required permissions
+- **Use Groups**: Assign permissions to groups, not individual users
+- **Separate Environments**: Maintain strict isolation between dev/staging/prod
+- **Regular Audits**: Review permissions and access logs regularly
+- **Document Policies**: Maintain clear documentation of access policies
+
+#### 4. Performance Optimization
+
+- Use external locations for large datasets
+- Implement table partitioning for query performance
+- Create materialized views for frequently accessed aggregations
+- Monitor query performance through system tables
+
+### Migration Strategies
+
+#### Upgrading from Hive Metastore
+
+```sql
+-- Sync Hive metastore table to Unity Catalog
+CREATE TABLE production.migrated_data.customers
+DEEP CLONE hive_metastore.default.customers;
+
+-- Create external table pointing to existing data
+CREATE EXTERNAL TABLE production.legacy_data.orders
+LOCATION 's3://legacy-bucket/orders/';
+
+-- Gradually migrate by creating views
+CREATE VIEW production.transition.customers AS
+SELECT * FROM hive_metastore.default.customers;
+```
+
+#### Using UCX (Unity Catalog Migration Tool)
+
+```bash
+# Install UCX
+databricks labs install ucx
+
+# Assess current workspace
+databricks labs ucx assessment
+
+# Create migration plan
+databricks labs ucx create-table-mapping
+
+# Execute migration
+databricks labs ucx migrate-tables
+```
+
+### Monitoring and Governance
+
+#### Key Metrics to Track
+
+```sql
+-- Table access frequency
+SELECT 
+  request_params.full_name_arg AS table_name,
+  COUNT(*) AS access_count,
+  COUNT(DISTINCT user_identity.email) AS unique_users
+FROM system.access.audit
+WHERE action_name = 'getTable'
+  AND event_date >= CURRENT_DATE() - INTERVAL 30 DAYS
+GROUP BY table_name
+ORDER BY access_count DESC;
+
+-- Storage usage by catalog
+SELECT 
+  catalog_name,
+  SUM(size_in_bytes) / 1024 / 1024 / 1024 AS size_gb,
+  COUNT(*) AS table_count
+FROM system.information_schema.tables
+GROUP BY catalog_name;
+
+-- Permission grants over time
+SELECT 
+  DATE(event_time) AS grant_date,
+  COUNT(*) AS grants_count
+FROM system.access.audit
+WHERE action_name IN ('grant', 'revoke')
+GROUP BY grant_date
+ORDER BY grant_date DESC;
+```
+
+### Troubleshooting Common Issues
+
+#### Issue: "PERMISSION_DENIED" Errors
+
+```sql
+-- Check current user privileges
+SHOW GRANTS ON CATALOG production;
+SHOW GRANTS ON SCHEMA production.customer_data;
+SHOW GRANTS ON TABLE production.customer_data.customers;
+
+-- Verify group membership
+SELECT CURRENT_USER();
+SELECT * FROM system.access.group_membership 
+WHERE user_name = CURRENT_USER();
+```
+
+#### Issue: Cannot Access External Tables
+
+```sql
+-- Verify storage credential
+DESCRIBE STORAGE CREDENTIAL aws_s3_credential;
+
+-- Check external location
+DESCRIBE EXTERNAL LOCATION production_data;
+
+-- Test access
+SELECT * FROM production.external_data.test_table LIMIT 10;
+```
+
+#### Issue: Lineage Not Appearing
+
+- Ensure compute has Unity Catalog enabled
+- Verify table is registered in Unity Catalog (not Hive metastore)
+- Check that lineage capture is enabled in workspace settings
+- Allow 24-48 hours for lineage to populate
+
+### References
+
+- [Official Unity Catalog Documentation](https://docs.databricks.com/data-governance/unity-catalog/)
+- [Unity Catalog Best Practices](https://docs.databricks.com/data-governance/unity-catalog/best-practices.html)
+- [Unity Catalog GitHub Repository](https://github.com/unitycatalog/unitycatalog)
+- [Delta Sharing Protocol](https://github.com/delta-io/delta-sharing)
+- [UCX Migration Tool](https://github.com/databrickslabs/ucx)
+
+---
+

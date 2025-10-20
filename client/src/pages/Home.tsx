@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Search, Download, Moon, Sun, BookOpen, Code2, Database, Package, Link2 } from "lucide-react";
+import { Search, Download, Moon, Sun, BookOpen, Code2, Database, Package, Link2, Shield } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -40,10 +40,11 @@ export default function Home() {
         "apps": "## Databricks Apps",
         "lakehouse": "## Databricks Lakehouse",
         "bundles": "## Databricks Asset Bundles",
+        "unity-catalog": "## Databricks Unity Catalog",
         "integration": "## Integration Patterns"
       };
       
-      const sectionStart = content.indexOf(sections[activeSection as keyof typeof sections]);
+        const sectionStart = content.indexOf(sections[activeSection as keyof typeof sections] || '');
       if (sectionStart !== -1) {
         const nextSection = content.indexOf("\n## ", sectionStart + 10);
         content = nextSection !== -1 
@@ -114,6 +115,13 @@ export default function Home() {
       color: "bg-green-500/10 text-green-500 border-green-500/20"
     },
     {
+      id: "unity-catalog",
+      title: "Unity Catalog",
+      icon: <Shield className="w-5 h-5" />,
+      description: "Unified governance for data and AI assets",
+      color: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20"
+    },
+    {
       id: "integration",
       title: "Integration Patterns",
       icon: <Link2 className="w-5 h-5" />,
@@ -136,7 +144,7 @@ export default function Home() {
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                   Databricks Research Hub
                 </h1>
-                <p className="text-sm text-muted-foreground">Comprehensive Guide to Apps, Lakehouse & Asset Bundles</p>
+                <p className="text-sm text-muted-foreground">Comprehensive Guide to Apps, Lakehouse, Asset Bundles & Unity Catalog</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -159,7 +167,7 @@ export default function Home() {
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
         {/* Topic Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           {topics.map((topic) => (
             <Card
               key={topic.id}
